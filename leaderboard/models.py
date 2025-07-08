@@ -16,6 +16,11 @@ class GameSession(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.game_mode} - {self.score}"
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['user']),
+        ]
 
 
 class Leaderboard(models.Model):

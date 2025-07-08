@@ -22,7 +22,7 @@ def get_user_rank(user_id):
 if __name__ == "__main__":
     
     while True:
-        user_id = random.randint(1, 1000)
+        user_id = random.randint(1,  1000000)
         submit_score(user_id)
         print(get_top_players())
         print(get_user_rank(user_id))

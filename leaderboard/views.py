@@ -3,8 +3,11 @@ from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Sum,F
+
+from leaderboard.tasks import update_leaderboard_ranks
 from .models import User, GameSession, Leaderboard
+from django.views.decorators.cache import cache_page
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -23,16 +26,12 @@ def submit_score(request):
             # Add game session
             GameSession.objects.create(user=user, score=score, game_mode="default")
 
-            # Recalculate total score
-            total = GameSession.objects.filter(user=user).aggregate(Sum("score"))["score__sum"] or 0
+            leaderboard_entry, created = Leaderboard.objects.get_or_create(user=user, defaults={"total_score": 0})
+            Leaderboard.objects.filter(user=user).update(total_score=F('total_score') + score)
 
-            # Update or create leaderboard entry
-            entry, _ = Leaderboard.objects.get_or_create(user=user)
-            entry.total_score = total
-            entry.save()
 
             # Update ranks
-            update_leaderboard_ranks()
+            # update_leaderboard_ranks.apply_async() using celery beat
 
         return JsonResponse({"message": "Score submitted successfully"})
 
@@ -43,6 +42,7 @@ def submit_score(request):
 
 
 
+@cache_page(5)
 @require_http_methods(["GET"])
 def get_leaderboard_top(request):
     top_players = Leaderboard.objects.order_by("rank")[:10]
@@ -67,8 +67,3 @@ def get_player_rank(request, user_id):
         return JsonResponse({"error": "User not found in leaderboard"}, status=404)
 
 
-def update_leaderboard_ranks():
-    leaderboard_entries = Leaderboard.objects.order_by("-total_score")
-    for i, entry in enumerate(leaderboard_entries, start=1):
-        entry.rank = i
-        entry.save()
